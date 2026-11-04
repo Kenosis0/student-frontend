@@ -19,6 +19,8 @@
       --accent: #10b981;
       --accent-hover: #059669;
       --accent-soft: rgba(16, 185, 129, 0.12);
+      --info: #3b82f6;
+      --info-soft: rgba(59, 130, 246, 0.12);
       --danger: #ef4444;
       --danger-soft: rgba(239, 68, 68, 0.1);
       --shadow-sm: 0 1px 3px rgba(15, 23, 42, 0.06);
@@ -38,6 +40,8 @@
       --accent: #10b981;
       --accent-hover: #34d399;
       --accent-soft: rgba(16, 185, 129, 0.15);
+      --info: #60a5fa;
+      --info-soft: rgba(96, 165, 250, 0.15);
       --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.3);
       --shadow-md: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
     }
@@ -104,6 +108,7 @@
       align-items: center;
       gap: 8px;
       margin-top: 2px;
+      flex-wrap: wrap;
     }
 
     .status-pill {
@@ -288,7 +293,7 @@
     .records-toolbar {
       display: flex;
       gap: 10px;
-      margin-bottom: 16px;
+      margin-bottom: 12px;
       align-items: center;
     }
 
@@ -302,6 +307,37 @@
       white-space: nowrap;
       padding: 9px 12px;
       font-size: 0.82rem;
+    }
+
+    .filter-tabs {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      margin-bottom: 14px;
+    }
+
+    .filter-tab {
+      width: auto;
+      margin: 0;
+      padding: 5px 11px;
+      font-size: 0.76rem;
+      font-weight: 600;
+      border-radius: 999px;
+      background: var(--bg-subtle);
+      color: var(--text-secondary);
+      border: 1px solid transparent;
+      cursor: pointer;
+    }
+
+    .filter-tab:hover {
+      border-color: var(--accent);
+      color: var(--text-primary);
+    }
+
+    .filter-tab.active {
+      background: var(--accent-soft);
+      color: var(--accent);
+      border-color: rgba(16, 185, 129, 0.3);
     }
 
     .counter-badge {
@@ -344,6 +380,21 @@
       word-break: break-word;
     }
 
+    .card-tag {
+      font-size: 0.7rem;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: 999px;
+      white-space: nowrap;
+      background: var(--accent-soft);
+      color: var(--accent);
+    }
+
+    .card-tag.roster {
+      background: var(--info-soft);
+      color: var(--info);
+    }
+
     .card-content {
       font-size: 0.9rem;
       color: var(--text-secondary);
@@ -360,6 +411,8 @@
       border-top: 1px dashed var(--border-color);
       font-size: 0.76rem;
       color: var(--text-muted);
+      gap: 8px;
+      flex-wrap: wrap;
     }
 
     .card-actions {
@@ -510,7 +563,7 @@
       <div class="brand-title">
         <h1>Student Database Project</h1>
         <div class="brand-subtitle">
-          <span>MongoDB Atlas &bull; Vercel Serverless API</span>
+          <span>LabAttendanceDBFlores &bull; Vercel Serverless API</span>
           <span id="connectionStatus" class="status-pill">
             <span class="status-dot"></span>
             <span id="statusText">Connecting...</span>
@@ -574,13 +627,19 @@
         <span>Database Records</span>
         <span class="counter-badge" id="recordCountBadge">0 Records</span>
       </h2>
-      <p class="panel-desc">Live documents retrieved from your serverless endpoint sorted by newest first.</p>
+      <p class="panel-desc">Live documents from <code>LabAttendanceDBFlores</code> (portal entries &amp; <code>daily_attendance</code>).</p>
 
       <div class="records-toolbar">
-        <input type="search" id="searchInput" class="search-input" placeholder="Filter records by title or content...">
-        <button type="button" class="icon-btn sort-btn" id="sortToggleBtn" title="Toggle Newest vs. Oldest sort order">
+        <input type="search" id="searchInput" class="search-input" placeholder="Search by name, student #, section, or content...">
+        <button type="button" class="icon-btn sort-btn" id="sortToggleBtn" title="Toggle sort order">
           &#8595; Newest
         </button>
+      </div>
+
+      <div class="filter-tabs" id="sourceFilterTabs">
+        <button type="button" class="filter-tab active" data-source="all">All Records</button>
+        <button type="button" class="filter-tab" data-source="daily_attendance">Daily Attendance</button>
+        <button type="button" class="filter-tab" data-source="records">Portal Entries</button>
       </div>
 
       <div id="recordsContainer">Loading...</div>
@@ -591,11 +650,14 @@
   <div class="modal-backdrop" id="apiModal">
     <div class="modal-card">
       <h2 style="margin-bottom: 8px;">Configure Vercel API URL</h2>
-      <p class="panel-desc">If Vercel assigned a custom deployment URL, update it here or in <code>index.html</code>.</p>
-      <input type="url" id="customApiInput" class="code-font" placeholder="https://student-api-backend.vercel.app/api">
-      <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 12px;">
-        <button type="button" class="icon-btn" id="closeModalBtn">Cancel</button>
-        <button type="button" class="submit-btn" id="saveApiBtn" style="width: auto; margin: 0; padding: 8px 16px;">Save &amp; Reconnect</button>
+      <p class="panel-desc">Connected to your production Vercel deployment by default. Override below if needed.</p>
+      <input type="url" id="customApiInput" class="code-font" placeholder="https://student-api-backend-two.vercel.app/api">
+      <div style="display: flex; gap: 10px; justify-content: space-between; margin-top: 12px; flex-wrap: wrap;">
+        <button type="button" class="icon-btn" id="resetApiBtn">Reset Default</button>
+        <div style="display: flex; gap: 10px;">
+          <button type="button" class="icon-btn" id="closeModalBtn">Cancel</button>
+          <button type="button" class="submit-btn" id="saveApiBtn" style="width: auto; margin: 0; padding: 8px 16px;">Save &amp; Reconnect</button>
+        </div>
       </div>
     </div>
   </div>
@@ -603,11 +665,18 @@
   <div id="toastContainer"></div>
 
   <script>
-    // IMPORTANT: Replace this URL with your specific Vercel deployment URL
-    const VERCEL_API_URL = localStorage.getItem('CUSTOM_VERCEL_API_URL') || 'https://student-api-backend.vercel.app/api';
+    // Clear legacy unconfigured default URL if previously cached
+    if (localStorage.getItem('CUSTOM_VERCEL_API_URL') === 'https://student-api-backend.vercel.app/api') {
+      localStorage.removeItem('CUSTOM_VERCEL_API_URL');
+    }
+
+    // Production Vercel Serverless API Endpoint
+    const DEFAULT_VERCEL_API_URL = 'https://student-api-backend-two.vercel.app/api';
+    const VERCEL_API_URL = localStorage.getItem('CUSTOM_VERCEL_API_URL') || DEFAULT_VERCEL_API_URL;
 
     let cachedRecords = [];
     let sortOrder = 'newest';
+    let sourceFilter = 'all';
 
     function showToast(message, isError = false) {
       const toastContainer = document.getElementById('toastContainer');
@@ -658,18 +727,54 @@
       `).join('');
     }
 
+    function updateFilterTabCounts() {
+      const allCount = cachedRecords.length;
+      const attendanceCount = cachedRecords.filter(r => r.source === 'daily_attendance').length;
+      const portalCount = cachedRecords.filter(r => r.source !== 'daily_attendance').length;
+
+      document.querySelectorAll('#sourceFilterTabs .filter-tab').forEach(tab => {
+        const src = tab.dataset.source;
+        if (src === 'all') tab.textContent = `All (${allCount})`;
+        else if (src === 'daily_attendance') tab.textContent = `Daily Attendance (${attendanceCount})`;
+        else if (src === 'records') tab.textContent = `Portal Entries (${portalCount})`;
+      });
+    }
+
     function getFilteredAndSortedRecords() {
       const q = document.getElementById('searchInput').value.toLowerCase().trim();
       let list = cachedRecords.slice();
 
+      if (sourceFilter === 'daily_attendance') {
+        list = list.filter(r => r.source === 'daily_attendance');
+      } else if (sourceFilter === 'records') {
+        list = list.filter(r => r.source !== 'daily_attendance');
+      }
+
       if (q) {
         list = list.filter(r =>
           (r.title && r.title.toLowerCase().includes(q)) ||
-          (r.content && r.content.toLowerCase().includes(q))
+          (r.content && r.content.toLowerCase().includes(q)) ||
+          (r.student_number && String(r.student_number).toLowerCase().includes(q)) ||
+          (r.section_code && String(r.section_code).toLowerCase().includes(q)) ||
+          (r.course && String(r.course).toLowerCase().includes(q))
         );
       }
 
       list.sort((a, b) => {
+        const aIsPortal = a.source !== 'daily_attendance';
+        const bIsPortal = b.source !== 'daily_attendance';
+
+        // Keep portal entries grouped cleanly relative to roster entries, or sort within each group
+        if (aIsPortal !== bIsPortal) {
+          return sortOrder === 'newest' ? (aIsPortal ? -1 : 1) : (aIsPortal ? 1 : -1);
+        }
+
+        if (!aIsPortal && a.roster_index != null && b.roster_index != null) {
+          return sortOrder === 'newest'
+            ? a.roster_index - b.roster_index
+            : b.roster_index - a.roster_index;
+        }
+
         const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
         const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
         return sortOrder === 'newest' ? timeB - timeA : timeA - timeB;
@@ -685,7 +790,7 @@
       container.innerHTML = '';
 
       if (records.length === 0) {
-        container.innerHTML = '<div class="empty-state"><p>No records found.</p></div>';
+        container.innerHTML = '<div class="empty-state"><p>No matching records found.</p></div>';
         return;
       }
 
@@ -695,17 +800,25 @@
         const safeTitle = escapeHtml(record.title);
         const safeContent = escapeHtml(record.content);
         const timeLabel = formatTimestamp(record.createdAt);
+        const isRoster = record.source === 'daily_attendance';
+        const tagLabel = isRoster
+          ? escapeHtml(record.section_code || record.course || 'Daily Attendance')
+          : 'Portal Entry';
+        const metaLabel = isRoster
+          ? `Collection: daily_attendance &bull; ${timeLabel}`
+          : `Created: ${timeLabel}`;
 
         div.innerHTML = `
           <div class="card-header">
             <strong class="card-title">${safeTitle}</strong>
+            <span class="card-tag ${isRoster ? 'roster' : ''}">${tagLabel}</span>
           </div>
           <div class="card-content">${safeContent}</div>
           <div class="card-footer">
-            <span>Created: ${timeLabel}</span>
+            <span>${metaLabel}</span>
             <div class="card-actions">
               <button type="button" class="card-action-btn copy-btn">Copy</button>
-              ${record._id ? `<button type="button" class="card-action-btn delete" data-id="${record._id}">Delete</button>` : ''}
+              ${(!isRoster && record._id) ? `<button type="button" class="card-action-btn delete" data-id="${record._id}">Delete</button>` : ''}
             </div>
           </div>
         `;
@@ -742,6 +855,7 @@
         const records = await response.json();
         cachedRecords = Array.isArray(records) ? records : [];
         setConnectionStatus(true);
+        updateFilterTabCounts();
         renderRecordsList(getFilteredAndSortedRecords());
       } catch (error) {
         setConnectionStatus(false);
@@ -787,10 +901,20 @@
       renderRecordsList(getFilteredAndSortedRecords());
     });
 
-    // Sort Order Toggle (Newest vs. Oldest)
+    // Source Filter Tabs
+    document.querySelectorAll('#sourceFilterTabs .filter-tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        document.querySelectorAll('#sourceFilterTabs .filter-tab').forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+        sourceFilter = tab.dataset.source;
+        renderRecordsList(getFilteredAndSortedRecords());
+      });
+    });
+
+    // Sort Order Toggle
     document.getElementById('sortToggleBtn').addEventListener('click', (e) => {
       sortOrder = sortOrder === 'newest' ? 'oldest' : 'newest';
-      e.currentTarget.innerHTML = sortOrder === 'newest' ? '&#8595; Newest' : '&#8593; Oldest';
+      e.currentTarget.innerHTML = sortOrder === 'newest' ? '&#8595; Newest' : '&#8593; Reverse';
       renderRecordsList(getFilteredAndSortedRecords());
     });
 
@@ -827,6 +951,10 @@
     });
     document.getElementById('closeModalBtn').addEventListener('click', () => {
       apiModal.classList.remove('active');
+    });
+    document.getElementById('resetApiBtn').addEventListener('click', () => {
+      localStorage.removeItem('CUSTOM_VERCEL_API_URL');
+      window.location.reload();
     });
     document.getElementById('saveApiBtn').addEventListener('click', () => {
       const val = document.getElementById('customApiInput').value.trim();
