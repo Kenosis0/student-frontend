@@ -28,7 +28,7 @@ flowchart TD
     CSS["css/styles.css — Theme Tokens, Glass Surfaces & Responsive Views"]
     Canvas["js/canvas.js — 60fps requestAnimationFrame Vector Flow Field"]
     App["js/app.js — Normalization, KPIs, Section Tabs & View Renderers"]
-    API["js/api.js — VERCEL_API_URL & Fetch Client (GET / POST / DELETE)"]
+    API["js/api.js — VERCEL_API_URL & Fetch Client (GET / POST / PUT / DELETE)"]
 
     HTML --> CSS
     HTML --> Canvas
@@ -93,7 +93,10 @@ All required identifiers, DOM hooks, and global bindings are preserved across th
 | Requirement | Location | Role |
 | :--- | :--- | :--- |
 | `VERCEL_API_URL` | `js/api.js` | Top-level constant pointing to `https://student-api-backend-two.vercel.app/api` (with optional `localStorage` override). |
-| `loadRecords()` | `js/app.js` | Async function that fetches `/api`, rebuilds section tabs & KPIs, and renders the active roster view. |
+| `loadRecords()` | `js/app.js` | Async function that fetches `/api` (`GET`), rebuilds section tabs & KPIs, and renders the active roster view. |
+| `createRosterRecord()` | `js/api.js` | Submits new attendance records (`POST /api`) with Date, Subject Name, Section, Student Name, and Status. |
+| `updateRosterRecord()` | `js/api.js` | Updates existing attendance records (`PUT /api?id=...`) via the interactive Edit Record modal (`#editRecordModal`). |
+| `deleteRosterRecord()` | `js/api.js` | Deletes attendance records (`DELETE /api?id=...`) following user confirmation alert. |
 | `#dataForm` | `index.html` | Attendance/record submission `<form>` inside the collapsible command drawer (`POST /api`). |
 | `#title` | `index.html` | Required record title `<input>` (supports both manual entry and quick-assist auto-fill). |
 | `#content` | `index.html` | Required record content `<input>` (supports both manual entry and quick-assist auto-fill). |

@@ -17,6 +17,7 @@ let activeSection = 'ALL';
 let viewMode = 'table'; // 'table' | 'compact'
 let sortAscending = true;
 let selectedAssistStatus = 'Present';
+let selectedEditStatus = 'Present';
 
 /* =========================================================
    UTILITIES & DATA UNPACKING
@@ -63,7 +64,8 @@ function classifyStatus(statusStr) {
  * Unpack structured student documents OR gracefully normalize manual { title, content } records.
  */
 function normalizeRecord(raw, fallbackIdx) {
-  const hasStructuredRoster = Boolean(raw.student_name && Array.isArray(raw.attendance_log));
+  const isRosterSource = raw.source === 'daily_attendance' || Boolean(raw.roster_index !== undefined && raw.roster_index !== null);
+  const hasStructuredRoster = Boolean(raw.student_name && Array.isArray(raw.attendance_log) && isRosterSource);
 
   if (hasStructuredRoster) {
     return {
@@ -82,43 +84,47 @@ function normalizeRecord(raw, fallbackIdx) {
     };
   }
 
-  // Gracefully unpack manually created { title, content } records
-  const titleStr = String(raw.title || 'Untitled Entry').trim();
+  // Gracefully unpack manually created { title, content } or structured portal records
+  const titleStr = String(raw.title || raw.student_name || 'Untitled Entry').trim();
   const contentStr = String(raw.content || '').trim();
 
-  let parsedSubject = 'Manual Portal Entry';
-  let parsedSection = 'PORTAL LOG';
-  let parsedSectionCode = 'PORTAL';
-  const syntheticLogs = [];
+  let parsedSubject = raw.subject || 'Manual Portal Entry';
+  let parsedSection = raw.section || 'PORTAL LOG';
+  let parsedSectionCode = raw.section_code || 'PORTAL';
+  const syntheticLogs = Array.isArray(raw.attendance_log) ? [...raw.attendance_log] : [];
 
   const pipeParts = contentStr.split('|').map(p => p.trim()).filter(Boolean);
   if (pipeParts.length >= 2) {
-    parsedSubject = pipeParts[0];
+    if (!raw.subject) parsedSubject = pipeParts[0];
     const secCandidate = pipeParts[1];
     if (/^(BSIT|BSCS|BSCpE|BSIS)/i.test(secCandidate)) {
-      parsedSection = secCandidate;
-      parsedSectionCode = secCandidate.split(/\s+/)[0];
+      if (!raw.section) parsedSection = secCandidate;
+      if (!raw.section_code) parsedSectionCode = secCandidate.split(/\s+/)[0];
     }
   }
 
-  const dateStatusRegex = /(\d{4}-\d{2}-\d{2})\s*\(?(Present|Late|Absent)\)?/gi;
-  let match;
-  while ((match = dateStatusRegex.exec(contentStr)) !== null) {
-    syntheticLogs.push({
-      date: match[1],
-      status: match[2].charAt(0).toUpperCase() + match[2].slice(1).toLowerCase()
-    });
+  if (syntheticLogs.length === 0) {
+    const dateStatusRegex = /(\d{4}-\d{2}-\d{2})\s*\(?(Present|Late|Absent)\)?/gi;
+    let match;
+    while ((match = dateStatusRegex.exec(contentStr)) !== null) {
+      syntheticLogs.push({
+        date: match[1],
+        status: match[2].charAt(0).toUpperCase() + match[2].slice(1).toLowerCase()
+      });
+    }
   }
 
   if (parsedSectionCode === 'PORTAL') {
     const titleSecMatch = titleStr.match(/\((BS(?:IT|CS|CpE|IS)-[0-9][A-Z])\)/i);
     if (titleSecMatch) {
       parsedSectionCode = titleSecMatch[1];
-      parsedSection = titleSecMatch[1];
+      if (parsedSection === 'PORTAL LOG') parsedSection = titleSecMatch[1];
     }
   }
 
-  const cleanDisplayName = titleStr.replace(/\s*\((BS(?:IT|CS|CpE|IS)-[0-9][A-Z])\)\s*$/i, '').trim() || titleStr;
+  const cleanDisplayName = raw.student_name
+    ? String(raw.student_name).trim()
+    : (titleStr.replace(/\s*\((BS(?:IT|CS|CpE|IS)-[0-9][A-Z])\)\s*$/i, '').trim() || titleStr);
   const createdDate = raw.createdAt ? new Date(raw.createdAt) : null;
   const subId = createdDate && !isNaN(createdDate.getTime())
     ? `LOG-${createdDate.toISOString().slice(5, 10).replace('-', '')}`
@@ -130,9 +136,9 @@ function normalizeRecord(raw, fallbackIdx) {
     rosterIndex: raw.roster_index ?? null,
     studentName: cleanDisplayName,
     studentNumber: raw.student_number || subId,
-    subject: raw.subject || parsedSubject,
-    section: raw.section || parsedSection,
-    sectionCode: raw.section_code || parsedSectionCode,
+    subject: parsedSubject,
+    section: parsedSection,
+    sectionCode: parsedSectionCode,
     attendanceLog: syntheticLogs,
     plainContent: syntheticLogs.length === 0 ? contentStr : '',
     rawTitle: titleStr,
@@ -273,13 +279,18 @@ function populateAssistRosterDropdown(normalizedList) {
   if (prev) sel.value = prev;
 }
 
-function syncAssistFieldsToForm() {
+function syncAssistFieldsToForm(sourceTrigger) {
   const studentVal = document.getElementById('assistStudentSelect').value;
   const sectionSel = document.getElementById('assistSectionSelect');
+  const subjectInput = document.getElementById('assistSubjectInput');
   const selectedOption = sectionSel.options[sectionSel.selectedIndex];
   const dateVal = document.getElementById('assistDateInput').value || new Date().toISOString().split('T')[0];
 
-  if (studentVal) {
+  if (sourceTrigger === 'section' && selectedOption && selectedOption.dataset.subject) {
+    subjectInput.value = selectedOption.dataset.subject;
+  }
+
+  if (studentVal && sourceTrigger === 'student') {
     const [studentName, sectionCode, fullSection, subject] = studentVal.split('||');
     for (let i = 0; i < sectionSel.options.length; i++) {
       if (sectionSel.options[i].dataset.code === sectionCode) {
@@ -287,19 +298,29 @@ function syncAssistFieldsToForm() {
         break;
       }
     }
+    if (subject) subjectInput.value = subject;
     document.getElementById('title').value = `${studentName} (${sectionCode})`;
-    document.getElementById('content').value = `${subject} | ${fullSection} | Latest: ${dateVal} (${selectedAssistStatus})`;
+    document.getElementById('content').value = `${subjectInput.value.trim() || subject} | ${fullSection} | Latest: ${dateVal} (${selectedAssistStatus})`;
+    return;
+  }
+
+  const secFull = selectedOption ? selectedOption.value : 'BSIT-3A 9332-AY226';
+  const secCode = selectedOption ? selectedOption.dataset.code : 'BSIT-3A';
+  const subj = (subjectInput && subjectInput.value.trim())
+    || (selectedOption ? selectedOption.dataset.subject : 'Laboratory Session');
+
+  if (studentVal) {
+    const [studentName] = studentVal.split('||');
+    document.getElementById('title').value = `${studentName} (${secCode})`;
   } else {
     const currentTitle = document.getElementById('title').value.trim();
-    const secFull = selectedOption ? selectedOption.value : 'BSIT-3A 9332-AY226';
-    const secCode = selectedOption ? selectedOption.dataset.code : 'BSIT-3A';
-    const subj = selectedOption ? selectedOption.dataset.subject : 'Laboratory Session';
-    if (currentTitle) {
+    if (currentTitle && sourceTrigger !== 'title') {
       const baseName = currentTitle.replace(/\s*\((BS(?:IT|CS|CpE|IS)-[0-9][A-Z])\)\s*$/i, '').trim();
       document.getElementById('title').value = `${baseName} (${secCode})`;
     }
-    document.getElementById('content').value = `${subj} | ${secFull} | Latest: ${dateVal} (${selectedAssistStatus})`;
   }
+
+  document.getElementById('content').value = `${subj} | ${secFull} | Latest: ${dateVal} (${selectedAssistStatus})`;
 }
 
 /* =========================================================
@@ -349,7 +370,74 @@ function filterAndSortNormalized(allNormalized) {
   return list;
 }
 
+function setEditModalStatus(statusVal) {
+  selectedEditStatus = statusVal || 'Present';
+  document.querySelectorAll('#editStatusGroup .status-seg-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.status.toLowerCase() === selectedEditStatus.toLowerCase());
+  });
+}
+
+function syncEditModalFields() {
+  const studentName = document.getElementById('editStudentName').value.trim();
+  const subject = document.getElementById('editSubject').value.trim();
+  const section = document.getElementById('editSection').value.trim();
+  const dateVal = document.getElementById('editDate').value || new Date().toISOString().split('T')[0];
+  const secCode = section ? section.split(/\s+/)[0] : '';
+
+  if (studentName) {
+    document.getElementById('editTitle').value = `${studentName}${secCode ? ` (${secCode})` : ''}`;
+  }
+  document.getElementById('editContent').value = [
+    subject || 'Laboratory Coursework',
+    section || 'Unassigned',
+    `Latest: ${dateVal} (${selectedEditStatus})`
+  ].join(' | ');
+}
+
+function openEditModal(item) {
+  const modal = document.getElementById('editRecordModal');
+  const latestLog = item.attendanceLog && item.attendanceLog.length > 0
+    ? item.attendanceLog[item.attendanceLog.length - 1]
+    : null;
+
+  const initialDate = (latestLog && latestLog.date) || new Date().toISOString().split('T')[0];
+  const initialStatus = (latestLog && latestLog.status) || 'Present';
+
+  document.getElementById('editRecordId').value = item._id || '';
+  document.getElementById('editRecordIdDisplay').textContent = `ID: ${item._id || '--'}`;
+  document.getElementById('editStudentName').value = item.studentName || '';
+  document.getElementById('editSubject').value = item.subject || '';
+  document.getElementById('editSection').value = item.section || '';
+  document.getElementById('editDate').value = initialDate;
+  setEditModalStatus(initialStatus);
+
+  document.getElementById('editTitle').value = item.rawTitle || `${item.studentName} (${item.sectionCode})`;
+  document.getElementById('editContent').value = item.rawContent || [
+    item.subject,
+    item.section,
+    `Latest: ${initialDate} (${initialStatus})`
+  ].filter(Boolean).join(' | ');
+
+  modal.classList.add('active');
+  modal.setAttribute('aria-hidden', 'false');
+  document.getElementById('editStudentName').focus();
+}
+
+function closeEditModal() {
+  const modal = document.getElementById('editRecordModal');
+  modal.classList.remove('active');
+  modal.setAttribute('aria-hidden', 'true');
+}
+
 function attachRecordActions(rootEl, item) {
+  const editBtn = rootEl.querySelector('.edit-record-btn');
+  if (editBtn && item._id) {
+    editBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      openEditModal(item);
+    });
+  }
+
   const copyBtn = rootEl.querySelector('.copy-record-btn');
   if (copyBtn) {
     copyBtn.addEventListener('click', (e) => {
@@ -366,9 +454,14 @@ function attachRecordActions(rootEl, item) {
   if (deleteBtn && item._id) {
     deleteBtn.addEventListener('click', async (e) => {
       e.stopPropagation();
+      const confirmed = window.confirm(
+        `Are you sure you want to delete the attendance record for "${item.studentName}"?`
+      );
+      if (!confirmed) return;
+
       try {
         await deleteRosterRecord(item._id);
-        showToast('Portal record deleted');
+        showToast('Attendance record deleted from MongoDB Atlas');
         await loadRecords();
       } catch (err) {
         showToast('Failed to delete record', true);
@@ -391,7 +484,7 @@ function renderTableView(records, container) {
         <th>STUDENT NAME</th>
         <th>SUBJECT</th>
         <th>SECTION</th>
-        <th>SESSION ATTENDANCE LOG (YYYY-MM-DD)</th>
+        <th>SESSION ATTENDANCE LOG (YYYY-MM-DD) &amp; ACTIONS</th>
       </tr>
     </thead>
     <tbody></tbody>
@@ -424,8 +517,9 @@ function renderTableView(records, container) {
         <div class="logs-wrap">
           <div class="log-pills-list">${logsHtml}</div>
           <div class="row-actions">
+            ${item._id ? `<button type="button" class="row-icon-btn edit-record-btn" data-id="${escapeHtml(item._id)}" title="Edit attendance record (PUT /api)">Edit</button>` : ''}
             <button type="button" class="row-icon-btn copy-record-btn" title="Copy record">Copy</button>
-            ${!item.isRoster && item._id ? `<button type="button" class="row-icon-btn danger delete-record-btn" data-id="${escapeHtml(item._id)}" title="Delete portal entry">Del</button>` : ''}
+            ${item._id ? `<button type="button" class="row-icon-btn danger delete-record-btn" data-id="${escapeHtml(item._id)}" title="Delete attendance record (DELETE /api)">Del</button>` : ''}
           </div>
         </div>
       </td>
@@ -486,8 +580,9 @@ function renderCompactView(records, container) {
           ${historyHtml}
         </div>
         <div class="row-actions row-actions-visible">
+          ${item._id ? `<button type="button" class="row-icon-btn edit-record-btn" data-id="${escapeHtml(item._id)}">Edit</button>` : ''}
           <button type="button" class="row-icon-btn copy-record-btn">Copy</button>
-          ${!item.isRoster && item._id ? `<button type="button" class="row-icon-btn danger delete-record-btn" data-id="${escapeHtml(item._id)}">Delete</button>` : ''}
+          ${item._id ? `<button type="button" class="row-icon-btn danger delete-record-btn" data-id="${escapeHtml(item._id)}">Delete</button>` : ''}
         </div>
       </div>
     `;
@@ -565,7 +660,7 @@ async function loadRecords() {
 function initApp() {
   document.getElementById('footerEndpointText').textContent = `Endpoint: ${VERCEL_API_URL}`;
 
-  // Required #dataForm Submission Handler
+  // Required #dataForm Submission Handler (POST /api - Create)
   document.getElementById('dataForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const title = document.getElementById('title').value.trim();
@@ -574,13 +669,34 @@ function initApp() {
 
     if (!title || !content) return;
 
+    const sectionSel = document.getElementById('assistSectionSelect');
+    const selectedOption = sectionSel.options[sectionSel.selectedIndex];
+    const section = selectedOption ? selectedOption.value : '';
+    const section_code = selectedOption ? selectedOption.dataset.code : '';
+    const subject = document.getElementById('assistSubjectInput').value.trim()
+      || (selectedOption ? selectedOption.dataset.subject : '');
+    const date = document.getElementById('assistDateInput').value || new Date().toISOString().split('T')[0];
+    const student_name = title.replace(/\s*\((BS(?:IT|CS|CpE|IS)-[0-9][A-Z])\)\s*$/i, '').trim() || title;
+
     submitBtn.disabled = true;
     submitBtn.textContent = 'Committing...';
 
     try {
-      await createRosterRecord({ title, content });
+      await createRosterRecord({
+        title,
+        content,
+        student_name,
+        subject,
+        section,
+        section_code,
+        date,
+        status: selectedAssistStatus
+      });
       document.getElementById('dataForm').reset();
       document.getElementById('assistStudentSelect').value = '';
+      if (selectedOption && selectedOption.dataset.subject) {
+        document.getElementById('assistSubjectInput').value = selectedOption.dataset.subject;
+      }
       showToast('Attendance record committed to MongoDB Atlas');
       await loadRecords();
     } catch (error) {
@@ -589,6 +705,64 @@ function initApp() {
       submitBtn.disabled = false;
       submitBtn.textContent = 'Commit Record';
     }
+  });
+
+  // Edit Attendance Record Modal Submission Handler (PUT /api - Update)
+  document.getElementById('editRecordForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const recordId = document.getElementById('editRecordId').value.trim();
+    const student_name = document.getElementById('editStudentName').value.trim();
+    const subject = document.getElementById('editSubject').value.trim();
+    const section = document.getElementById('editSection').value.trim();
+    const section_code = section ? section.split(/\s+/)[0] : '';
+    const date = document.getElementById('editDate').value.trim();
+    const title = document.getElementById('editTitle').value.trim();
+    const content = document.getElementById('editContent').value.trim();
+    const saveEditBtn = document.getElementById('saveEditBtn');
+
+    if (!recordId || !title || !content) return;
+
+    saveEditBtn.disabled = true;
+    saveEditBtn.textContent = 'Saving...';
+
+    try {
+      await updateRosterRecord(recordId, {
+        title,
+        content,
+        student_name,
+        subject,
+        section,
+        section_code,
+        date,
+        status: selectedEditStatus
+      });
+      closeEditModal();
+      showToast('Attendance record updated in MongoDB Atlas');
+      await loadRecords();
+    } catch (error) {
+      showToast('Failed to update attendance record', true);
+    } finally {
+      saveEditBtn.disabled = false;
+      saveEditBtn.textContent = 'Save Changes';
+    }
+  });
+
+  // Edit Modal Input Auto-Sync & Controls
+  ['editStudentName', 'editSubject', 'editSection', 'editDate'].forEach(fieldId => {
+    document.getElementById(fieldId).addEventListener('input', syncEditModalFields);
+    document.getElementById(fieldId).addEventListener('change', syncEditModalFields);
+  });
+
+  document.querySelectorAll('#editStatusGroup .status-seg-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      setEditModalStatus(btn.dataset.status);
+      syncEditModalFields();
+    });
+  });
+
+  document.getElementById('cancelEditBtn').addEventListener('click', closeEditModal);
+  document.getElementById('editRecordModal').addEventListener('click', (e) => {
+    if (e.target.id === 'editRecordModal') closeEditModal();
   });
 
   // Collapsible Command Drawer
@@ -601,6 +775,7 @@ function initApp() {
     toggleDrawerBtn.setAttribute('aria-expanded', String(open));
     document.getElementById('drawerBtnIcon').textContent = open ? '−' : '+';
     if (open) {
+      syncAssistFieldsToForm('init');
       document.getElementById('title').focus();
     }
   }
@@ -615,16 +790,22 @@ function initApp() {
 
   // Quick-Assist Form Controls
   document.getElementById('assistDateInput').value = new Date().toISOString().split('T')[0];
-  document.getElementById('assistStudentSelect').addEventListener('change', syncAssistFieldsToForm);
-  document.getElementById('assistSectionSelect').addEventListener('change', syncAssistFieldsToForm);
-  document.getElementById('assistDateInput').addEventListener('change', syncAssistFieldsToForm);
+  document.getElementById('assistStudentSelect').addEventListener('change', () => syncAssistFieldsToForm('student'));
+  document.getElementById('assistSubjectInput').addEventListener('input', () => syncAssistFieldsToForm('subject'));
+  document.getElementById('assistSectionSelect').addEventListener('change', () => syncAssistFieldsToForm('section'));
+  document.getElementById('assistDateInput').addEventListener('change', () => syncAssistFieldsToForm('date'));
+  document.getElementById('title').addEventListener('input', () => {
+    if (!document.getElementById('content').value.trim()) {
+      syncAssistFieldsToForm('title');
+    }
+  });
 
   document.querySelectorAll('#assistStatusGroup .status-seg-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       document.querySelectorAll('#assistStatusGroup .status-seg-btn').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
       selectedAssistStatus = btn.dataset.status;
-      syncAssistFieldsToForm();
+      syncAssistFieldsToForm('status');
     });
   });
 
@@ -653,6 +834,7 @@ function initApp() {
       searchInput.focus();
     } else if (e.key === 'Escape') {
       document.getElementById('apiModal').classList.remove('active');
+      closeEditModal();
       if (commandDrawer.classList.contains('open')) setDrawerOpen(false);
     }
   });

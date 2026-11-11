@@ -47,7 +47,27 @@ async function createRosterRecord(payload) {
 }
 
 /**
- * Delete a manual portal record by MongoDB ObjectId (DELETE /api?id=...).
+ * Update an existing attendance or portal record in MongoDB Atlas (PUT /api?id=...).
+ * @param {string} recordId
+ * @param {Object} payload
+ * @returns {Promise<Object>}
+ */
+async function updateRosterRecord(recordId, payload) {
+  const response = await fetch(`${VERCEL_API_URL}?id=${encodeURIComponent(recordId)}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id: recordId, ...payload })
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to update record (status ${response.status})`);
+  }
+
+  return response.json();
+}
+
+/**
+ * Delete an attendance or portal record by MongoDB ObjectId (DELETE /api?id=...).
  * @param {string} recordId
  * @returns {Promise<Object>}
  */

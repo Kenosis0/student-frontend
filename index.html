@@ -61,7 +61,7 @@
         <button type="button" class="btn btn-compact" id="closeDrawerBtn">Close [Esc]</button>
       </div>
 
-      <!-- Optional Student / Section / Date / Status Quick-Builder -->
+      <!-- Optional Student / Subject / Section / Date / Status Quick-Builder -->
       <div class="quick-assist-grid">
         <div class="field-block">
           <label class="field-label" for="assistStudentSelect">
@@ -70,6 +70,13 @@
           <select id="assistStudentSelect" class="input-control">
             <option value="">-- Custom / Manual Entry --</option>
           </select>
+        </div>
+
+        <div class="field-block">
+          <label class="field-label" for="assistSubjectInput">
+            <span>Subject Name</span>
+          </label>
+          <input type="text" id="assistSubjectInput" class="input-control" value="Network Administration" placeholder="e.g., Network Administration">
         </div>
 
         <div class="field-block">
@@ -109,7 +116,7 @@
         <div class="form-row-main">
           <div class="field-block">
             <label class="field-label" for="title">
-              <span>Record Title</span>
+              <span>Student Name / Record Title</span>
               <span class="field-id-hint">#title</span>
             </label>
             <input type="text" id="title" class="input-control" placeholder="e.g., Juan Carlos Dela Cruz (BSIT-3A)" required>
@@ -183,8 +190,8 @@
             <span class="kbd-hint">/</span>
           </div>
 
-          <button type="button" class="endpoint-badge" id="endpointBadgeBtn" title="Click to inspect or configure API endpoint">
-            <span class="method-tag">GET</span>
+          <button type="button" class="endpoint-badge" id="endpointBadgeBtn" title="Click to inspect or configure API endpoint (GET, POST, PUT, DELETE)">
+            <span class="method-tag">CRUD</span>
             <span>/api</span>
           </button>
 
@@ -207,6 +214,84 @@
         <span id="footerEndpointText">Endpoint: https://student-api-backend-two.vercel.app/api</span>
       </footer>
     </main>
+  </div>
+
+  <!-- Edit Attendance Record Modal (PUT /api) -->
+  <div class="modal-backdrop" id="editRecordModal" aria-hidden="true">
+    <div class="modal-panel modal-panel-wide">
+      <div class="modal-header-row">
+        <div>
+          <h3>Update Attendance Record</h3>
+          <p>Modify student details, subject, section, or attendance session log (`PUT /api`).</p>
+        </div>
+        <span class="method-tag">PUT /api</span>
+      </div>
+
+      <form id="editRecordForm">
+        <input type="hidden" id="editRecordId">
+
+        <div class="edit-modal-grid">
+          <div class="field-block">
+            <label class="field-label" for="editStudentName">
+              <span>Student Name</span>
+            </label>
+            <input type="text" id="editStudentName" class="input-control" placeholder="e.g., Juan Carlos Dela Cruz" required>
+          </div>
+
+          <div class="field-block">
+            <label class="field-label" for="editSubject">
+              <span>Subject Name</span>
+            </label>
+            <input type="text" id="editSubject" class="input-control" placeholder="e.g., Network Administration" required>
+          </div>
+
+          <div class="field-block">
+            <label class="field-label" for="editSection">
+              <span>Section</span>
+            </label>
+            <input type="text" id="editSection" class="input-control mono" placeholder="e.g., BSIT-3A 9332-AY226" required>
+          </div>
+
+          <div class="field-block">
+            <label class="field-label" for="editDate">
+              <span>Attendance Date</span>
+            </label>
+            <input type="date" id="editDate" class="input-control mono" required>
+          </div>
+
+          <div class="field-block edit-status-block">
+            <span class="field-label">Attendance Status</span>
+            <div class="status-segment" id="editStatusGroup">
+              <button type="button" class="status-seg-btn active" data-status="Present">Present</button>
+              <button type="button" class="status-seg-btn" data-status="Late">Late</button>
+              <button type="button" class="status-seg-btn" data-status="Absent">Absent</button>
+            </div>
+          </div>
+
+          <div class="field-block edit-full-span">
+            <label class="field-label" for="editTitle">
+              <span>Record Title</span>
+            </label>
+            <input type="text" id="editTitle" class="input-control" required>
+          </div>
+
+          <div class="field-block edit-full-span">
+            <label class="field-label" for="editContent">
+              <span>Session Log / Record Content</span>
+            </label>
+            <input type="text" id="editContent" class="input-control mono" required>
+          </div>
+        </div>
+
+        <div class="modal-actions">
+          <span class="modal-record-id mono" id="editRecordIdDisplay">ID: --</span>
+          <div class="modal-actions-group">
+            <button type="button" class="btn" id="cancelEditBtn">Cancel</button>
+            <button type="submit" class="btn btn-primary" id="saveEditBtn">Save Changes</button>
+          </div>
+        </div>
+      </form>
+    </div>
   </div>
 
   <!-- API Endpoint Configuration Modal -->
